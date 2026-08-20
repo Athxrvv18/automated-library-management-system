@@ -5185,14 +5185,25 @@ def home():
 
 
 # ============================================================
+# DATABASE INITIALIZATION
+# ============================================================
+# Gunicorn imports this module instead of executing it as
+# __main__. Therefore the database must be initialized when the
+# Flask application is imported.
+#
+# INSERT OR IGNORE is used by add_sample_data(), so this is safe
+# to run on every application start.
+# ============================================================
+
+initialize_database()
+add_sample_data()
+
+
+# ============================================================
 # SERVER START
 # ============================================================
 
 if __name__ == "__main__":
-
-    initialize_database()
-
-    add_sample_data()
 
     print(
         "\n========================================"
@@ -5261,5 +5272,5 @@ if __name__ == "__main__":
     app.run(
         host="0.0.0.0",
         port=int(os.getenv("PORT", "5000")),
-        debug=os.getenv("FLASK_DEBUG", "false").lower() == "true"
+        debug=False
     )
