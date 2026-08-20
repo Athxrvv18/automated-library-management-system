@@ -237,20 +237,41 @@ def row_to_dict(row):
 # ============================================================
 
 def send_email(to_email, subject, body):
-    print(f"📧 Email recipient: {to_email}")
-    print(f"📧 Subject: {subject}")
+    print("\n========================================")
+    print("📧 EMAIL SYSTEM")
+    print("========================================")
+    print("Recipient:", to_email)
+    print("Sender:", EMAIL_ADDRESS if EMAIL_ADDRESS else "<missing>")
+    print("SMTP Server:", SMTP_SERVER)
+    print("SMTP Port:", SMTP_PORT)
+    print("Email Enabled:", EMAIL_ENABLED)
+    print("Subject:", subject)
+
+    # --------------------------------------------------------
+    # CONFIGURATION CHECKS
+    # --------------------------------------------------------
 
     if not EMAIL_ENABLED:
-        print("⚠️ Email system disabled")
+        print("❌ Email system is disabled.")
+        print("Set LIBRARY_EMAIL_ENABLED=true on Render.")
         return False
 
-    if not EMAIL_ADDRESS or not EMAIL_PASSWORD:
-        print("❌ Email credentials are missing")
+    if not EMAIL_ADDRESS:
+        print("❌ LIBRARY_EMAIL_ADDRESS is empty.")
+        return False
+
+    if not EMAIL_PASSWORD:
+        print("❌ LIBRARY_EMAIL_PASSWORD is empty.")
+        print("Use a Gmail App Password, not your normal Gmail password.")
         return False
 
     if not to_email:
-        print("❌ Recipient email is missing")
+        print("❌ Recipient email is empty.")
         return False
+
+    # --------------------------------------------------------
+    # SEND EMAIL
+    # --------------------------------------------------------
 
     try:
         message = EmailMessage()
@@ -259,22 +280,64 @@ def send_email(to_email, subject, body):
         message["Subject"] = subject
         message.set_content(body)
 
+        print("📨 Connecting to SMTP server...")
+
         with smtplib.SMTP(
             SMTP_SERVER,
             SMTP_PORT,
-            timeout=20,
+            timeout=30,
         ) as server:
+
             server.ehlo()
+            print("✅ SMTP connection established")
+
+            print("🔐 Starting TLS...")
             server.starttls()
             server.ehlo()
+            print("✅ TLS enabled")
+
+            print("🔑 Authenticating with Gmail...")
             server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
+            print("✅ Gmail authentication successful")
+
+            print("📤 Sending email...")
             server.send_message(message)
 
-        print("✅ Email sent")
+        print("========================================")
+        print("✅ EMAIL SENT SUCCESSFULLY")
+        print("========================================")
         return True
 
+    except smtplib.SMTPAuthenticationError as error:
+        print("========================================")
+        print("❌ SMTP AUTHENTICATION FAILED")
+        print("========================================")
+        print("Gmail rejected the login.")
+        print("Check LIBRARY_EMAIL_ADDRESS and use a Gmail App Password.")
+        print("SMTP error:", error)
+        return False
+
+    except smtplib.SMTPConnectError as error:
+        print("========================================")
+        print("❌ SMTP CONNECTION FAILED")
+        print("========================================")
+        print("Check LIBRARY_SMTP_SERVER and LIBRARY_SMTP_PORT.")
+        print("SMTP error:", error)
+        return False
+
+    except smtplib.SMTPException as error:
+        print("========================================")
+        print("❌ SMTP ERROR")
+        print("========================================")
+        print("SMTP error:", error)
+        return False
+
     except Exception as error:
-        print("❌ Email error:", error)
+        print("========================================")
+        print("❌ EMAIL SENDING FAILED")
+        print("========================================")
+        print("Error type:", type(error).__name__)
+        print("Error:", error)
         return False
 
 

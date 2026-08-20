@@ -9,7 +9,7 @@ import requests
 # CONFIGURATION
 # ============================================================
 
-API_URL = "http://127.0.0.1:5000/api/update"
+API_URL = "https://automated-library-management-system-lbfi.onrender.com/api/update"
 
 DEVICE_ID = "LIBRARY_PI_01"
 
