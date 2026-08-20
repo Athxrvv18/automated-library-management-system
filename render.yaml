@@ -1,0 +1,6 @@
+services:
+  - type: web
+    name: automated-library-management-system
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn iot_server:app
