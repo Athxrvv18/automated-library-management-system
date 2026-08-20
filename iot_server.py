@@ -9,10 +9,11 @@ from flask import (
     flash,
 )
 import os
-import smtplib
 from functools import wraps
-from email.message import EmailMessage
 from datetime import datetime, timedelta
+from urllib import request as urllib_request
+from urllib import error as urllib_error
+import json
 
 import psycopg2
 from psycopg2.extras import RealDictCursor
@@ -62,14 +63,19 @@ EMAIL_ENABLED = (
     os.getenv("LIBRARY_EMAIL_ENABLED", "false").lower() == "true"
 )
 
-EMAIL_ADDRESS = os.getenv("LIBRARY_EMAIL_ADDRESS", "")
-EMAIL_PASSWORD = os.getenv("LIBRARY_EMAIL_PASSWORD", "")
-SMTP_SERVER = os.getenv("LIBRARY_SMTP_SERVER", "smtp.gmail.com")
+# Resend configuration.
+# RESEND_API_KEY is the secret API key from your Resend dashboard.
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
 
-try:
-    SMTP_PORT = int(os.getenv("LIBRARY_SMTP_PORT", "587"))
-except ValueError:
-    SMTP_PORT = 587
+# This must be a sender that Resend allows for your account/domain.
+# For initial testing, Resend documents onboarding@resend.dev.
+RESEND_FROM_EMAIL = os.getenv(
+    "RESEND_FROM_EMAIL",
+    "onboarding@resend.dev"
+)
+
+RESEND_API_URL = "https://api.resend.com/emails"
+
 
 
 # ============================================================
@@ -237,99 +243,105 @@ def row_to_dict(row):
 # ============================================================
 
 def send_email(to_email, subject, body):
+    """Send a transactional email through the Resend HTTPS API."""
+
     print("\n========================================")
-    print("📧 EMAIL SYSTEM")
+    print("📧 EMAIL SYSTEM - RESEND")
     print("========================================")
     print("Recipient:", to_email)
-    print("Sender:", EMAIL_ADDRESS if EMAIL_ADDRESS else "<missing>")
-    print("SMTP Server:", SMTP_SERVER)
-    print("SMTP Port:", SMTP_PORT)
+    print("From:", RESEND_FROM_EMAIL if RESEND_FROM_EMAIL else "<missing>")
     print("Email Enabled:", EMAIL_ENABLED)
     print("Subject:", subject)
-
-    # --------------------------------------------------------
-    # CONFIGURATION CHECKS
-    # --------------------------------------------------------
 
     if not EMAIL_ENABLED:
         print("❌ Email system is disabled.")
         print("Set LIBRARY_EMAIL_ENABLED=true on Render.")
         return False
 
-    if not EMAIL_ADDRESS:
-        print("❌ LIBRARY_EMAIL_ADDRESS is empty.")
+    if not RESEND_API_KEY:
+        print("❌ RESEND_API_KEY is empty.")
+        print("Create a Resend API key and add it to Render Environment.")
         return False
 
-    if not EMAIL_PASSWORD:
-        print("❌ LIBRARY_EMAIL_PASSWORD is empty.")
-        print("Use a Gmail App Password, not your normal Gmail password.")
+    if not RESEND_FROM_EMAIL:
+        print("❌ RESEND_FROM_EMAIL is empty.")
         return False
 
     if not to_email:
         print("❌ Recipient email is empty.")
         return False
 
-    # --------------------------------------------------------
-    # SEND EMAIL
-    # --------------------------------------------------------
+    # Resend's API accepts HTML. Escape the plain-text message into a
+    # simple HTML body while preserving line breaks.
+    import html
+    html_body = html.escape(body).replace("\n", "<br>")
+
+    payload = {
+        "from": RESEND_FROM_EMAIL,
+        "to": [to_email],
+        "subject": subject,
+        "html": html_body,
+        "text": body,
+    }
 
     try:
-        message = EmailMessage()
-        message["From"] = EMAIL_ADDRESS
-        message["To"] = to_email
-        message["Subject"] = subject
-        message.set_content(body)
+        print("📨 Connecting to Resend HTTPS API...")
 
-        print("📨 Connecting to SMTP server...")
+        http_request = urllib_request.Request(
+            RESEND_API_URL,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {RESEND_API_KEY}",
+                "Content-Type": "application/json",
+                "User-Agent": "ALMS/1.0",
+            },
+            method="POST",
+        )
 
-        with smtplib.SMTP(
-            SMTP_SERVER,
-            SMTP_PORT,
-            timeout=30,
-        ) as server:
+        with urllib_request.urlopen(
+            http_request,
+            timeout=30
+        ) as response:
+            response_body = response.read().decode("utf-8")
+            status_code = response.status
 
-            server.ehlo()
-            print("✅ SMTP connection established")
+        print("Resend HTTP status:", status_code)
 
-            print("🔐 Starting TLS...")
-            server.starttls()
-            server.ehlo()
-            print("✅ TLS enabled")
+        if 200 <= status_code < 300:
+            try:
+                result = json.loads(response_body)
+                print("Resend message ID:", result.get("id", "-"))
+            except Exception:
+                print("Resend response:", response_body)
 
-            print("🔑 Authenticating with Gmail...")
-            server.login(EMAIL_ADDRESS, EMAIL_PASSWORD)
-            print("✅ Gmail authentication successful")
+            print("========================================")
+            print("✅ EMAIL SENT SUCCESSFULLY")
+            print("========================================")
+            return True
 
-            print("📤 Sending email...")
-            server.send_message(message)
-
-        print("========================================")
-        print("✅ EMAIL SENT SUCCESSFULLY")
-        print("========================================")
-        return True
-
-    except smtplib.SMTPAuthenticationError as error:
-        print("========================================")
-        print("❌ SMTP AUTHENTICATION FAILED")
-        print("========================================")
-        print("Gmail rejected the login.")
-        print("Check LIBRARY_EMAIL_ADDRESS and use a Gmail App Password.")
-        print("SMTP error:", error)
+        print("❌ Resend returned HTTP", status_code)
+        print("Response:", response_body)
         return False
 
-    except smtplib.SMTPConnectError as error:
+    except urllib_error.HTTPError as error:
+        try:
+            error_body = error.read().decode("utf-8")
+        except Exception:
+            error_body = str(error)
+
         print("========================================")
-        print("❌ SMTP CONNECTION FAILED")
+        print("❌ RESEND API ERROR")
         print("========================================")
-        print("Check LIBRARY_SMTP_SERVER and LIBRARY_SMTP_PORT.")
-        print("SMTP error:", error)
+        print("HTTP status:", error.code)
+        print("Response:", error_body)
+        print("Check RESEND_API_KEY and RESEND_FROM_EMAIL.")
         return False
 
-    except smtplib.SMTPException as error:
+    except urllib_error.URLError as error:
         print("========================================")
-        print("❌ SMTP ERROR")
+        print("❌ RESEND NETWORK ERROR")
         print("========================================")
-        print("SMTP error:", error)
+        print("Error:", error.reason)
         return False
 
     except Exception as error:
