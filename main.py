@@ -46,7 +46,7 @@ GPIO.setup(
 
 # Replace this example with the stream URL shown by your Android IP Webcam app.
 # Typical IP Webcam stream URL: http://PHONE_IP:8080/video
-CAMERA_URL = "http://192.168.1.100:8080/video"
+CAMERA_URL = "http://192.168.194.110:8080/video"
 
 print("Connecting to Android IP camera:", CAMERA_URL)
 cap = cv2.VideoCapture(CAMERA_URL)
