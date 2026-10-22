@@ -41,18 +41,27 @@ GPIO.setup(
 
 
 # ============================================================
-# CAMERA
+# ANDROID IP WEBCAM CAMERA
 # ============================================================
 
-cap = cv2.VideoCapture(0)
+# Replace this example with the stream URL shown by your Android IP Webcam app.
+# Typical IP Webcam stream URL: http://PHONE_IP:8080/video
+CAMERA_URL = "http://192.168.1.100:8080/video"
+
+print("Connecting to Android IP camera:", CAMERA_URL)
+cap = cv2.VideoCapture(CAMERA_URL)
+
+# Request a small buffer so the stream is less delayed (backend-dependent).
+cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
 
 if not cap.isOpened():
-
-    print("❌ Camera could not be opened")
-
+    print("❌ Android IP camera could not be opened")
+    print("Check that the phone camera server is running, the phone and Pi are on the same Wi-Fi,")
+    print("and CAMERA_URL matches the stream URL shown in the app.")
     GPIO.cleanup()
+    raise SystemExit(1)
 
-    exit()
+print("✅ Android IP camera connected")
 
 
 # ============================================================
@@ -711,4 +720,4 @@ finally:
 
     print(
         "✅ GPIO and camera released"
-    )
+    )   
